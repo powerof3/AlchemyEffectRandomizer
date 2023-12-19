@@ -82,12 +82,14 @@ void Manager::InitBlacklist()
 
 void Manager::LoadIngredientEffects()
 {
-	const auto& ingredients = RE::TESDataHandler::GetSingleton()->GetFormArray<RE::IngredientItem>();
+	if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
+		const auto& ingredients = dataHandler->GetFormArray<RE::IngredientItem>();
 
-	originalEffectGroups.reserve(ingredients.size());
-	for (const auto& ingredient : ingredients) {
-		if (ingredient && !blacklist.contains(ingredient)) {
-			originalEffectGroups.emplace_back(ingredient->effects.begin(), ingredient->effects.end());
+		originalEffectGroups.reserve(ingredients.size());
+		for (const auto& ingredient : ingredients) {
+			if (ingredient && !blacklist.contains(ingredient)) {
+				originalEffectGroups.emplace_back(ingredient->effects.begin(), ingredient->effects.end());
+			}
 		}
 	}
 }
@@ -110,18 +112,20 @@ void Manager::OnDataLoad()
 
 void Manager::ApplyEffectGroups(const IngredientEffectGroups& a_effectGroups) const
 {
-	std::uint32_t outerIdx = 0;
-	for (const auto& ingredient : RE::TESDataHandler::GetSingleton()->GetFormArray<RE::IngredientItem>()) {
-		if (ingredient && !blacklist.contains(ingredient)) {
-			std::uint32_t innerIdx = 0;  // serves as effect idx
-			for (auto& effect : ingredient->effects) {
-				effect = a_effectGroups[outerIdx][innerIdx];
-				innerIdx++;
+    if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
+		std::uint32_t outerIdx = 0;
+		for (const auto& ingredient : dataHandler->GetFormArray<RE::IngredientItem>()) {
+			if (ingredient && !blacklist.contains(ingredient)) {
+				std::uint32_t innerIdx = 0;  // serves as effect idx
+				for (auto& effect : ingredient->effects) {
+					effect = a_effectGroups[outerIdx][innerIdx];
+					innerIdx++;
+				}
+				if (shuffleOn != SHUFFLE_ON::kPlaythrough) {
+					UnlearnIngredientEffects(ingredient);
+				}
+				outerIdx++;
 			}
-			if (shuffleOn != SHUFFLE_ON::kPlaythrough) {
-				UnlearnIngredientEffects(ingredient);
-			}
-			outerIdx++;
 		}
 	}
 }
@@ -247,7 +251,7 @@ void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectG
 	}
 	if (!shuffled || a_reshuffle || shuffleOn == SHUFFLE_ON::kPlaythrough) {
 		ApplyEffectGroups(ingredientEffectGroup);
-		logger::info("Shuffled {} ingredient effects ({} individual effects | RNG seed : {})", ingredientEffectGroup.size(), ingredientEffectGroup.size() * 4, seed);
+		logger::info("\tShuffled {} ingredient effects ({} individual effects | RNG seed : {})", ingredientEffectGroup.size(), ingredientEffectGroup.size() * 4, seed);
 	}
 	shuffled = true;
 }
@@ -315,10 +319,12 @@ void Manager::OnSave(const std::string& a_savePath)
 {
 	currentSave = a_savePath;
 
-	for (const auto& ingredient : RE::TESDataHandler::GetSingleton()->GetFormArray<RE::IngredientItem>()) {
-		if (ingredient && !blacklist.contains(ingredient)) {
-			if (ingredient->gamedata.knownEffectFlags != 0) {
-				currentIngredientKnownEffectsMap[edid::get_editorID(ingredient)] = ingredient->gamedata.knownEffectFlags;
+	if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
+		for (const auto& ingredient : dataHandler->GetFormArray<RE::IngredientItem>()) {
+			if (ingredient && !blacklist.contains(ingredient)) {
+				if (ingredient->gamedata.knownEffectFlags != 0) {
+					currentIngredientKnownEffectsMap[edid::get_editorID(ingredient)] = ingredient->gamedata.knownEffectFlags;
+				}
 			}
 		}
 	}
@@ -351,7 +357,9 @@ RE::BSEventNotifyControl Manager::ProcessEvent(const RE::MenuOpenCloseEvent* a_e
 			oldPlayerID = get_game_playerID();
 		} else {
 			currentPlayerID = get_game_playerID();
-			ShuffleIngredientEffects(shuffleOn == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
+			SKSE::GetTaskInterface()->AddTask([this]() {
+				ShuffleIngredientEffects(shuffleOn == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
+			});
 			newGameStarted = false;
 		}
 	} else if (a_event->menuName == RE::CraftingMenu::MENU_NAME && shuffleOn == SHUFFLE_ON::kAlchemyMenu) {

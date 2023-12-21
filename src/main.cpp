@@ -44,7 +44,7 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	v.PluginName("AlchemyEffectsRandomizer");
 	v.AuthorName("powerofthree");
 	v.UsesAddressLibrary();
-	v.UsesNoStructs();
+	v.UsesUpdatedStructs();
 	v.CompatibleVersions({ SKSE::RUNTIME_LATEST });
 
 	return v;

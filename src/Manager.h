@@ -3,7 +3,7 @@
 using IngredientEffects = std::vector<RE::Effect*>;
 using IngredientEffectGroups = std::vector<IngredientEffects>;
 
-using IngredientKnownEffectsMap = ankerl::unordered_dense::map<std::string, std::uint16_t>;  // IngredientEDID -> KnownEffectFlags
+using IngredientKnownEffectsMap = std::unordered_map<std::string, std::uint16_t>;  // IngredientEDID -> KnownEffectFlags
 
 struct ShuffledIngredientEffectGroups
 {
@@ -66,8 +66,8 @@ private:
 	std::string folder{ "AlchemyEffectRandomizer" };
 	std::string ingredientKnownEffectsPath{ R"(Data\AlchemyEffectRandomizer\IngredientKnownEffects.json)" };
 
-	ankerl::unordered_dense::set<std::string>         blacklistIDs;  // EDID
-	ankerl::unordered_dense::set<RE::IngredientItem*> blacklist;     // IngredientItem
+	std::unordered_set<std::string>         blacklistIDs;  // EDID
+	std::unordered_set<RE::IngredientItem*> blacklist;     // IngredientItem
 
 	SHUFFLE_METHOD shuffleMethod{ SHUFFLE_METHOD::kShuffle };
 	SHUFFLE_ON     shuffleOn{ SHUFFLE_ON::kPlaythrough };
@@ -80,14 +80,14 @@ private:
 	std::uint64_t currentPlayerID{ std::numeric_limits<std::uint64_t>::max() };
 	std::uint64_t oldPlayerID{ std::numeric_limits<std::uint64_t>::max() };
 
-	ankerl::unordered_dense::map<std::uint64_t, ShuffledIngredientEffectGroups> playthroughEffectGroupMap;  // playerID -> IngredientEffectGroups
+	std::unordered_map<std::uint64_t, ShuffledIngredientEffectGroups> playthroughEffectGroupMap;  // playerID -> IngredientEffectGroups
 
 	bool isAlchemyMenu{ false };
 	bool hasCraftedPotion{ false };
 
-	bool                                                                 unlearnIngredients{ false };
-	ankerl::unordered_dense::map<std::string, IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
-	IngredientKnownEffectsMap                                            currentIngredientKnownEffectsMap;
+	bool                                                       unlearnIngredients{ false };
+	std::unordered_map<std::string, IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
+	IngredientKnownEffectsMap                                  currentIngredientKnownEffectsMap;
 
 	std::uint64_t fixedSeed{ 0 };
 };

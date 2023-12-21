@@ -71,6 +71,8 @@ void Manager::OnPostLoad()
 
 void Manager::InitBlacklist()
 {
+	logger::info("{:*^30}", "LOADING BLACKLIST");
+
 	for (auto& id : blacklistIDs) {
 		if (auto form = RE::TESForm::LookupByEditorID<RE::IngredientItem>(id)) {
 			blacklist.emplace(form);
@@ -78,30 +80,45 @@ void Manager::InitBlacklist()
 			logger::error("Blacklist: skipped {} (couldn't find form)", id);
 		}
 	}
+
+	logger::info("Blacklist: {} ingredients", blacklist.size());
 }
 
 void Manager::LoadIngredientEffects()
 {
+	logger::info("{:*^30}", "LOADING INGREDIENTS");
+
 	if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
 		const auto& ingredients = dataHandler->GetFormArray<RE::IngredientItem>();
 
 		originalEffectGroups.reserve(ingredients.size());
 		for (const auto& ingredient : ingredients) {
 			if (ingredient && !blacklist.contains(ingredient)) {
-				originalEffectGroups.emplace_back(ingredient->effects.begin(), ingredient->effects.end());
+				if (ingredient->effects.size() == 4) {
+					if (std::ranges::all_of(ingredient->effects, [](const auto* effect) { return effect && effect->baseEffect; })) {
+						originalEffectGroups.emplace_back(ingredient->effects.begin(), ingredient->effects.end());
+					} else {
+						logger::info("{} has null effect groups, skipping", edid::get_editorID(ingredient));
+						blacklist.emplace(ingredient);
+					}
+				} else {
+					logger::info("{} has nonstandard effect groups, skipping (size : {})", edid::get_editorID(ingredient), ingredient->effects.size());
+					blacklist.emplace(ingredient);
+				}
 			}
 		}
 	}
+
+	logger::info("EffectGroups: {} ({} effects)", originalEffectGroups.size(), originalEffectGroups.size() * 4);
+	logger::info("Blacklist: {} ingredients", blacklist.size());
 }
 
 void Manager::OnDataLoad()
 {
-	logger::info("{:*^30}", "DATA LOAD");
-
 	InitBlacklist();
 	LoadIngredientEffects();
 
-	RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(GetSingleton()); 
+	RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(GetSingleton());
 
 	if ((shuffleOn == SHUFFLE_ON::kGameLoad && (fixedSeed == 0 || !unlearnIngredients)) || shuffleOn == SHUFFLE_ON::kAlchemyMenu) {
 		ShuffleIngredientEffects(shuffledEffectGroups);
@@ -112,11 +129,11 @@ void Manager::OnDataLoad()
 
 void Manager::ApplyEffectGroups(const IngredientEffectGroups& a_effectGroups) const
 {
-    if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
-		std::uint32_t outerIdx = 0;
+	if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
+		std::size_t outerIdx = 0;
 		for (const auto& ingredient : dataHandler->GetFormArray<RE::IngredientItem>()) {
 			if (ingredient && !blacklist.contains(ingredient)) {
-				std::uint32_t innerIdx = 0;  // serves as effect idx
+				std::size_t innerIdx = 0;  // serves as effect idx
 				for (auto& effect : ingredient->effects) {
 					effect = a_effectGroups[outerIdx][innerIdx];
 					innerIdx++;
@@ -243,7 +260,10 @@ void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectG
 {
 	auto& [ingredientEffectGroup, shuffled] = a_effectGroups;
 	if (ingredientEffectGroup.empty()) {
-		ingredientEffectGroup = originalEffectGroups;
+		ingredientEffectGroup.assign(originalEffectGroups.begin(), originalEffectGroups.end());
+	}
+	if (ingredientEffectGroup.empty()) {
+		return;
 	}
 	const auto seed = GetRNGSeed();
 	if (!shuffled || a_reshuffle) {
@@ -375,7 +395,7 @@ RE::BSEventNotifyControl Manager::ProcessEvent(const RE::MenuOpenCloseEvent* a_e
 			}
 		} else if (isAlchemyMenu && hasCraftedPotion) {
 			hasCraftedPotion = false;
-		    SKSE::GetTaskInterface()->AddTask([this]() {
+			SKSE::GetTaskInterface()->AddTask([this]() {
 				ShuffleIngredientEffects(shuffledEffectGroups, true);
 			});
 			RE::ItemCrafted::GetEventSource()->RemoveEventSink(GetSingleton());
@@ -395,5 +415,5 @@ RE::BSEventNotifyControl Manager::ProcessEvent(const RE::ItemCrafted::Event* a_e
 		hasCraftedPotion = true;
 	}
 
-    return RE::BSEventNotifyControl::kContinue;
+	return RE::BSEventNotifyControl::kContinue;
 }

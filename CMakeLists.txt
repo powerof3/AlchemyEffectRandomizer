@@ -143,6 +143,7 @@ else ()
 	)
 endif()
 
+find_package(boost_unordered CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 
 find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/bitmasks.hpp")
@@ -204,6 +205,7 @@ target_link_libraries(
 	${PROJECT_NAME}
 	PRIVATE
 		${CommonLibName}::${CommonLibName}
+		Boost::unordered
 		glaze::glaze
 )
 

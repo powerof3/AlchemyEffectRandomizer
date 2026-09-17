@@ -152,7 +152,7 @@ bool Manager::can_unlearn_effect(const std::optional<std::uint16_t>& a_effectKno
 		return true;
 	}
 
-	return GetShuffleOn() == SHUFFLE_ON::kPlaythrough || (GetShuffleOn() == SHUFFLE_ON::kGameLoad && fixedSeed != 0) ? (*a_effectKnownFlag && a_effectIdx) == 0 : true;
+	return GetShuffleOn() == SHUFFLE_ON::kPlaythrough || (GetShuffleOn() == SHUFFLE_ON::kGameLoad && fixedSeed != 0) ? (*a_effectKnownFlag & (1u << a_effectIdx)) == 0 : true;
 }
 
 void Manager::UnlearnIngredientEffects(RE::IngredientItem* a_ingredient) const
@@ -255,7 +255,7 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 	}
 }
 
-void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectGroups, bool a_reshuffle) const
+void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectGroups, bool a_reshuffle)
 {
 	auto& [ingredientEffectGroup, shuffled] = a_effectGroups;
 	if (ingredientEffectGroup.empty()) {

@@ -3,7 +3,7 @@
 using IngredientEffects = std::vector<RE::Effect*>;
 using IngredientEffectGroups = std::vector<IngredientEffects>;
 
-using IngredientKnownEffectsMap = std::unordered_map<std::string, std::uint16_t>;  // IngredientEDID -> KnownEffectFlags
+using IngredientKnownEffectsMap = StringMap<std::uint16_t>;  // IngredientEDID -> KnownEffectFlags
 
 struct ShuffledIngredientEffectGroups
 {
@@ -38,7 +38,7 @@ public:
 	void OnDeleteSave(const std::string& a_savePath);
 	void OnNewGame();
 
-	void ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectGroups, bool a_reshuffle = false) const;
+	void ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectGroups, bool a_reshuffle = false);
 	void UnlearnIngredientEffects(RE::IngredientItem* a_ingredient) const;
 
 private:
@@ -66,20 +66,19 @@ private:
 	RE::BSEventNotifyControl ProcessEvent(const RE::ItemCrafted::Event* a_event, RE::BSTEventSource<RE::ItemCrafted::Event>*) override;
 
 	// members
-	std::string folder{ "AlchemyEffectRandomizer" };
-	std::string ingredientKnownEffectsPath{ R"(Data\AlchemyEffectRandomizer\IngredientKnownEffects.json)" };
-
+	static constexpr std::string_view folder{ "AlchemyEffectRandomizer" };
+	static constexpr std::string_view ingredientKnownEffectsPath{ R"(Data\AlchemyEffectRandomizer\IngredientKnownEffects.json)" };
 	static constexpr std::string_view path = R"(Data\SKSE\Plugins\po3_AlchemyEffectRandomizer.ini)";
 
-	std::unordered_set<std::string>         blacklistIDs;  // EDID
-	std::unordered_set<RE::IngredientItem*> blacklist;     // IngredientItem
+	StringSet                blacklistIDs;  // EDID
+	Set<RE::IngredientItem*> blacklist;     // IngredientItem
 
 	REX::TIniSetting<std::uint32_t> shuffleMethod{ "Settings", "iRandomMethod", std::to_underlying(SHUFFLE_METHOD::kShuffle) };
 	REX::TIniSetting<std::uint32_t> shuffleOn{ "Settings", "iRandomizeOn", std::to_underlying(SHUFFLE_ON::kPlaythrough) };
 	REX::TIniSetting<bool>          unlearnIngredients{ "Settings", "bUnlearnIngredients", false };
-	
-	REX::TIniSetting<std::string>   fixedSeedStr{ "Settings", "iSeed", "0" };
-	std::uint64_t                   fixedSeed{ 0 };
+
+	REX::TIniSetting<std::string> fixedSeedStr{ "Settings", "iSeed", "0" };
+	std::uint64_t                 fixedSeed{ 0 };
 
 	IngredientEffectGroups         originalEffectGroups;
 	ShuffledIngredientEffectGroups shuffledEffectGroups;  // gameload/static
@@ -89,11 +88,11 @@ private:
 	std::uint64_t currentPlayerID{ std::numeric_limits<std::uint64_t>::max() };
 	std::uint64_t oldPlayerID{ std::numeric_limits<std::uint64_t>::max() };
 
-	std::unordered_map<std::uint64_t, ShuffledIngredientEffectGroups> playthroughEffectGroupMap;  // playerID -> IngredientEffectGroups
+	Map<std::uint64_t, ShuffledIngredientEffectGroups> playthroughEffectGroupMap;  // playerID -> IngredientEffectGroups
 
 	bool isAlchemyMenu{ false };
 	bool hasCraftedPotion{ false };
 
-	std::unordered_map<std::string, IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
-	IngredientKnownEffectsMap                                  currentIngredientKnownEffectsMap;
+	StringMap<IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
+	IngredientKnownEffectsMap            currentIngredientKnownEffectsMap;
 };

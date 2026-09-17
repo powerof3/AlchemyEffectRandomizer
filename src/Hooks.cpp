@@ -18,10 +18,10 @@ namespace Hooks
 
 	void Install()
 	{
-		logger::info("{:*^30}", "HOOKS");
+		REX::INFO("{:*^30}", "HOOKS");
 
 		stl::write_vfunc<RE::IngredientItem, LoadGame>();
 
-		logger::info("Installed Ingredient::LoadGame hooks");
+		REX::INFO("Installed Ingredient::LoadGame hooks");
 	}
 }

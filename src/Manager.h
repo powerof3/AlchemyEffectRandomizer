@@ -12,7 +12,7 @@ struct ShuffledIngredientEffectGroups
 };
 
 class Manager :
-	public ISingleton<Manager>,
+	public REX::TSingleton<Manager>,
 	public RE::BSTEventSink<RE::MenuOpenCloseEvent>,
 	public RE::BSTEventSink<RE::ItemCrafted::Event>
 {
@@ -47,6 +47,9 @@ private:
 	void InitBlacklist();
 	void LoadIngredientEffects();
 
+	[[nodiscard]] SHUFFLE_METHOD GetShuffleMethod() const { return static_cast<SHUFFLE_METHOD>(shuffleMethod.GetValue()); }
+	[[nodiscard]] SHUFFLE_ON     GetShuffleOn() const { return static_cast<SHUFFLE_ON>(shuffleOn.GetValue()); }
+
 	std::uint64_t GetCurrentPlayerID();
 	void          GetPlayerIDFromSave();
 	bool          ShouldShuffleOnLoadSaveOrNewGame(bool a_saveLoad);
@@ -66,11 +69,17 @@ private:
 	std::string folder{ "AlchemyEffectRandomizer" };
 	std::string ingredientKnownEffectsPath{ R"(Data\AlchemyEffectRandomizer\IngredientKnownEffects.json)" };
 
+	static constexpr std::string_view path = R"(Data\SKSE\Plugins\po3_AlchemyEffectRandomizer.ini)";
+
 	std::unordered_set<std::string>         blacklistIDs;  // EDID
 	std::unordered_set<RE::IngredientItem*> blacklist;     // IngredientItem
 
-	SHUFFLE_METHOD shuffleMethod{ SHUFFLE_METHOD::kShuffle };
-	SHUFFLE_ON     shuffleOn{ SHUFFLE_ON::kPlaythrough };
+	REX::TIniSetting<std::uint32_t> shuffleMethod{ "Settings", "iRandomMethod", std::to_underlying(SHUFFLE_METHOD::kShuffle) };
+	REX::TIniSetting<std::uint32_t> shuffleOn{ "Settings", "iRandomizeOn", std::to_underlying(SHUFFLE_ON::kPlaythrough) };
+	REX::TIniSetting<bool>          unlearnIngredients{ "Settings", "bUnlearnIngredients", false };
+	
+	REX::TIniSetting<std::string>   fixedSeedStr{ "Settings", "iSeed", "0" };
+	std::uint64_t                   fixedSeed{ 0 };
 
 	IngredientEffectGroups         originalEffectGroups;
 	ShuffledIngredientEffectGroups shuffledEffectGroups;  // gameload/static
@@ -85,9 +94,6 @@ private:
 	bool isAlchemyMenu{ false };
 	bool hasCraftedPotion{ false };
 
-	bool                                                       unlearnIngredients{ false };
 	std::unordered_map<std::string, IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
 	IngredientKnownEffectsMap                                  currentIngredientKnownEffectsMap;
-
-	std::uint64_t fixedSeed{ 0 };
 };

@@ -6,35 +6,22 @@
 #include <unordered_set>
 
 #include "RE/Skyrim.h"
+#include "REX/REX.h"
 #include "SKSE/SKSE.h"
 
 #include "ClibUtil/distribution.hpp"
-#include "ClibUtil/rng.hpp"
-#include "ClibUtil/simpleINI.hpp"
-#include "ClibUtil/singleton.hpp"
-#include "ClibUtil/timer.hpp"
 #include <glaze/glaze.hpp>
 #include <spdlog/sinks/basic_file_sink.h>
 
 #include "ClibUtil/editorID.hpp"
 
-#define DLLEXPORT __declspec(dllexport)
-
-namespace logger = SKSE::log;
-namespace ini = clib_util::ini;
 namespace dist = clib_util::distribution;
 namespace edid = clib_util::editorID;
 
 using namespace std::literals;
-using namespace clib_util::singleton;
-
-using RNG = clib_util::RNG<XoshiroCpp::Xoshiro256StarStar>;
-using Timer = clib_util::Timer;
 
 namespace stl
 {
-	using namespace SKSE::stl;
-
 	template <class F, class T>
 	void write_vfunc()
 	{
@@ -45,19 +32,27 @@ namespace stl
 	template <class T>
 	void write_thunk_call(std::uintptr_t a_src)
 	{
-		auto& trampoline = SKSE::GetTrampoline();
-		SKSE::AllocTrampoline(14);
-
+		auto& trampoline = REL::GetTrampoline();
 		T::func = trampoline.write_call<5>(a_src, T::thunk);
 	}
 
 	template <class T>
 	void write_thunk_jmp(std::uintptr_t a_src)
 	{
-		SKSE::AllocTrampoline(14);
-		auto& trampoline = SKSE::GetTrampoline();
+		auto& trampoline = REL::GetTrampoline();
+		T::func = trampoline.write_jmp<5>(a_src, T::thunk);
+	}
 
-		T::func = trampoline.write_branch<5>(a_src, T::thunk);
+	template <class T>
+	T& get_setting_ref(REX::TSetting<T>& a_setting)
+	{
+		return static_cast<T&>(a_setting);
+	}
+
+	template <class T>
+	const T& get_setting_ref(const REX::TSetting<T>& a_setting)
+	{
+		return static_cast<const T&>(a_setting);
 	}
 }
 

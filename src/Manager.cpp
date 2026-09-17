@@ -1,57 +1,55 @@
 #include "Manager.h"
 #include "Hooks.h"
 
+#include <SimpleIni.h>
+#undef ERROR
+
 void Manager::LoadSettings()
 {
-	const auto path = std::format("Data/SKSE/Plugins/po3_{}.ini", folder);
+	const auto store = REX::FIniSettingStore::GetSingleton();
+	store->Init(path.data(), "");
 
-	CSimpleIniA ini;
-	ini.SetUnicode();
+	store->Load();
+	store->Save();
 
-	ini.LoadFile(path.c_str());
-
-	ini::get_value(ini, shuffleMethod, "Settings", "iRandomMethod", ";Method\n;0 - Swap (ingredient effect groups with each other)\n;1 - Shuffle (all effects across each ingredient)");
-	ini::get_value(ini, shuffleOn, "Settings", "iRandomizeOn", ";When to apply the randomizer\n;0 - Game Load (randomized on game load)\n;1 - Playthrough (randomized across different playthroughs)\n;2 - Alchemy Menu (randomized on game load and every time you craft a potion!)");
-	ini::get_value(ini, unlearnIngredients, "Settings", "bUnlearnIngredients", ";Unlearn all ingredients upon randomization (for Playthrough mode, this happens only once).");
-	ini::get_value(ini, fixedSeed, "Settings", "iSeed", ";Fixed RNG seed (for OnGameLoad randomization). If 0, ingredients will have different effects on each game load.");
-
-	(void)ini.SaveFile(path.c_str());
+	fixedSeed = REX::STR::TO_NUM<std::uint64_t>(stl::get_setting_ref(fixedSeedStr));
 }
 
 void Manager::LoadBlacklist()
 {
-	logger::info("{:*^30}", "INI");
+	REX::INFO("{:*^30}", "INI");
 
 	const auto folderPath = std::format(R"(Data\{})", folder);
 
-	if (!std::filesystem::exists(folderPath)) {
-		logger::info("{} folder not found...", folder);
+	std::error_code ec;
+	if (!std::filesystem::exists(folderPath, ec)) {
+		REX::INFO("{} folder not found...", folder);
 		return;
 	}
 
 	const auto configs = dist::get_configs(folderPath);
 
 	if (configs.empty()) {
-		logger::warn("No .ini files were found in {} folder, aborting...", folderPath);
+		REX::WARN("No .ini files were found in {} folder, aborting...", folderPath);
 		return;
 	}
 
-	logger::info("{} matching inis found", configs.size());
+	REX::INFO("{} matching inis found", configs.size());
 
-	for (auto& path : configs) {
-		logger::info("\tINI : {}", path);
+	for (auto& config : configs) {
+		REX::INFO("\tINI : {}", config);
 
 		CSimpleIniA ini;
 		ini.SetUnicode();
 		ini.SetAllowKeyOnly();
 
-		if (const auto rc = ini.LoadFile(path.c_str()); rc < 0) {
-			logger::error("	couldn't read INI");
+		if (const auto rc = ini.LoadFile(config.c_str()); rc < 0) {
+			REX::ERROR("\tcouldn't read INI");
 			continue;
 		}
 
 		if (const auto values = ini.GetSection("Blacklist"); values && !values->empty()) {
-			logger::info("\t\t{} blacklist entries", values->size());
+			REX::INFO("\t\t{} blacklist entries", values->size());
 			for (const auto& key : *values | std::views::keys) {
 				blacklistIDs.emplace(key.pItem);
 			}
@@ -64,29 +62,30 @@ void Manager::OnPostLoad()
 	LoadSettings();
 	LoadBlacklist();
 
-	glz::read_file(ingredientKnownEffectsSaveMap, ingredientKnownEffectsPath, std::string());
+	std::string           buffer;
+	[[maybe_unused]] auto ec = glz::read_file_json(ingredientKnownEffectsSaveMap, ingredientKnownEffectsPath, buffer);
 
 	Hooks::Install();
 }
 
 void Manager::InitBlacklist()
 {
-	logger::info("{:*^30}", "LOADING BLACKLIST");
+	REX::INFO("{:*^30}", "LOADING BLACKLIST");
 
 	for (auto& id : blacklistIDs) {
 		if (auto form = RE::TESForm::LookupByEditorID<RE::IngredientItem>(id)) {
 			blacklist.emplace(form);
 		} else {
-			logger::error("Blacklist: skipped {} (couldn't find form)", id);
+			REX::ERROR("Blacklist: skipped {} (couldn't find form)", id);
 		}
 	}
 
-	logger::info("Blacklist: {} ingredients", blacklist.size());
+	REX::INFO("Blacklist: {} ingredients", blacklist.size());
 }
 
 void Manager::LoadIngredientEffects()
 {
-	logger::info("{:*^30}", "LOADING INGREDIENTS");
+	REX::INFO("{:*^30}", "LOADING INGREDIENTS");
 
 	if (const auto dataHandler = RE::TESDataHandler::GetSingleton()) {
 		const auto& ingredients = dataHandler->GetFormArray<RE::IngredientItem>();
@@ -98,19 +97,19 @@ void Manager::LoadIngredientEffects()
 					if (std::ranges::all_of(ingredient->effects, [](const auto* effect) { return effect && effect->baseEffect; })) {
 						originalEffectGroups.emplace_back(ingredient->effects.begin(), ingredient->effects.end());
 					} else {
-						logger::info("{} has null effect groups, skipping", edid::get_editorID(ingredient));
+						REX::INFO("{} has null effect groups, skipping", edid::get_editorID(ingredient));
 						blacklist.emplace(ingredient);
 					}
 				} else {
-					logger::info("{} has nonstandard effect groups, skipping (size : {})", edid::get_editorID(ingredient), ingredient->effects.size());
+					REX::INFO("{} has nonstandard effect groups, skipping (size : {})", edid::get_editorID(ingredient), ingredient->effects.size());
 					blacklist.emplace(ingredient);
 				}
 			}
 		}
 	}
 
-	logger::info("EffectGroups: {} ({} effects)", originalEffectGroups.size(), originalEffectGroups.size() * 4);
-	logger::info("Blacklist: {} ingredients", blacklist.size());
+	REX::INFO("EffectGroups: {} ({} effects)", originalEffectGroups.size(), originalEffectGroups.size() * 4);
+	REX::INFO("Blacklist: {} ingredients", blacklist.size());
 }
 
 void Manager::OnDataLoad()
@@ -120,11 +119,11 @@ void Manager::OnDataLoad()
 
 	RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(GetSingleton());
 
-	if ((shuffleOn == SHUFFLE_ON::kGameLoad && (fixedSeed == 0 || !unlearnIngredients)) || shuffleOn == SHUFFLE_ON::kAlchemyMenu) {
+	if ((GetShuffleOn() == SHUFFLE_ON::kGameLoad && (fixedSeed == 0 || !unlearnIngredients)) || GetShuffleOn() == SHUFFLE_ON::kAlchemyMenu) {
 		ShuffleIngredientEffects(shuffledEffectGroups);
 	}
 
-	logger::info("{:*^30}", "LOAD/SAVE");
+	REX::INFO("{:*^30}", "LOAD/SAVE");
 }
 
 void Manager::ApplyEffectGroups(const IngredientEffectGroups& a_effectGroups) const
@@ -138,7 +137,7 @@ void Manager::ApplyEffectGroups(const IngredientEffectGroups& a_effectGroups) co
 					effect = a_effectGroups[outerIdx][innerIdx];
 					innerIdx++;
 				}
-				if (shuffleOn != SHUFFLE_ON::kPlaythrough) {
+				if (GetShuffleOn() != SHUFFLE_ON::kPlaythrough) {
 					UnlearnIngredientEffects(ingredient);
 				}
 				outerIdx++;
@@ -153,7 +152,7 @@ bool Manager::can_unlearn_effect(const std::optional<std::uint16_t>& a_effectKno
 		return true;
 	}
 
-	return shuffleOn == SHUFFLE_ON::kPlaythrough || (shuffleOn == SHUFFLE_ON::kGameLoad && fixedSeed != 0) ? (*a_effectKnownFlag && a_effectIdx) == 0 : true;
+	return GetShuffleOn() == SHUFFLE_ON::kPlaythrough || (GetShuffleOn() == SHUFFLE_ON::kGameLoad && fixedSeed != 0) ? (*a_effectKnownFlag && a_effectIdx) == 0 : true;
 }
 
 void Manager::UnlearnIngredientEffects(RE::IngredientItem* a_ingredient) const
@@ -179,7 +178,7 @@ std::uint64_t Manager::GetRNGSeed(bool a_onDataLoad) const
 		return fixedSeed != 0 ? fixedSeed : std::chrono::steady_clock::now().time_since_epoch().count();
 	};
 
-	switch (shuffleOn) {
+	switch (GetShuffleOn()) {
 	case SHUFFLE_ON::kGameLoad:
 		return get_fixed_seed();
 	case SHUFFLE_ON::kAlchemyMenu:
@@ -193,9 +192,9 @@ std::uint64_t Manager::GetRNGSeed(bool a_onDataLoad) const
 
 void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffectGroups& a_effectGroups) const
 {
-	RNG local_rng(a_seed);
+	REX::TRandom<std::uint64_t> local_rng(a_seed);
 
-	switch (shuffleMethod) {
+	switch (GetShuffleMethod()) {
 	case SHUFFLE_METHOD::kSwap:
 		{
 			// swap effect groups around
@@ -204,7 +203,7 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 		break;
 	case SHUFFLE_METHOD::kShuffle:
 		{
-			constexpr auto shuffle_effects = [](IngredientEffectGroups& a_ingredients, RNG& a_rng) {
+			constexpr auto shuffle_effects = [](IngredientEffectGroups& a_ingredients, REX::TRandom<std::uint64_t>& a_rng) {
 				// flatten
 				auto effects = a_ingredients | std::views::join | std::ranges::to<IngredientEffects>();
 				// shuffle
@@ -236,7 +235,7 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 			std::vector<std::future<void>> futures;
 			for (auto& chunk : ingredient_chunks) {
 				futures.emplace_back(std::async(std::launch::async, [&] {
-					RNG threadRNG(a_seed);
+					REX::TRandom<std::uint64_t> threadRNG(a_seed);
 					while (!is_distribution_unique(chunk)) {
 						shuffle_effects(chunk, threadRNG);
 					}
@@ -269,9 +268,9 @@ void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectG
 	if (!shuffled || a_reshuffle) {
 		shuffle_effect_groups(seed, ingredientEffectGroup);
 	}
-	if (!shuffled || a_reshuffle || shuffleOn == SHUFFLE_ON::kPlaythrough) {
+	if (!shuffled || a_reshuffle || GetShuffleOn() == SHUFFLE_ON::kPlaythrough) {
 		ApplyEffectGroups(ingredientEffectGroup);
-		logger::info("\tShuffled {} ingredient effects ({} individual effects | RNG seed : {})", ingredientEffectGroup.size(), ingredientEffectGroup.size() * 4, seed);
+		REX::INFO("\tShuffled {} ingredient effects ({} individual effects | RNG seed : {})", ingredientEffectGroup.size(), ingredientEffectGroup.size() * 4, seed);
 	}
 	shuffled = true;
 }
@@ -293,11 +292,11 @@ void Manager::GetPlayerIDFromSave()
 
 bool Manager::ShouldShuffleOnLoadSaveOrNewGame(bool a_saveLoad)
 {
-	switch (shuffleOn) {
+	switch (GetShuffleOn()) {
 	case SHUFFLE_ON::kGameLoad:
 		return fixedSeed != 0 && unlearnIngredients;
 	case SHUFFLE_ON::kPlaythrough:
-		return a_saveLoad && GetCurrentPlayerID() == oldPlayerID ? false : true;
+		return !a_saveLoad || GetCurrentPlayerID() != oldPlayerID;
 	default:
 		return false;
 	}
@@ -305,13 +304,13 @@ bool Manager::ShouldShuffleOnLoadSaveOrNewGame(bool a_saveLoad)
 
 std::uint64_t Manager::get_game_playerID()
 {
-	return RE::BGSSaveLoadManager::GetSingleton()->currentPlayerID & 0xFFFFFFFF;
+	return RE::BGSSaveLoadManager::GetSingleton()->currentCharacterID & 0xFFFFFFFF;
 }
 
 std::uint64_t Manager::save_to_playerID(const std::string& a_savePath)
 {
 	if (const auto save = clib_util::string::split(a_savePath, "_"); save.size() == 9) {
-		return clib_util::string::to_num<std::uint64_t>(save[1], true);
+		return REX::STR::TO_NUM<std::uint64_t>(save[1], true);
 	} else {
 		return std::numeric_limits<std::uint64_t>::max();  // non standard save name, use game playerID instead
 	}
@@ -328,10 +327,10 @@ void Manager::OnLoad(const std::string& a_savePath)
 		currentIngredientKnownEffectsMap.clear();
 	}
 
-	logger::info("Loaded : {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
+	REX::INFO("Loaded : {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
 
 	if (ShouldShuffleOnLoadSaveOrNewGame(true)) {
-		ShuffleIngredientEffects(shuffleOn == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
+		ShuffleIngredientEffects(GetShuffleOn() == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
 	}
 }
 
@@ -349,11 +348,12 @@ void Manager::OnSave(const std::string& a_savePath)
 		}
 	}
 
-	logger::info("Save: {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
+	REX::INFO("Save: {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
 
 	ingredientKnownEffectsSaveMap[currentSave] = currentIngredientKnownEffectsMap;
 
-	[[maybe_unused]] auto ec = glz::write_file(ingredientKnownEffectsSaveMap, ingredientKnownEffectsPath, std::string());
+	std::string           buffer;
+	[[maybe_unused]] auto ec = glz::write_file_json(ingredientKnownEffectsSaveMap, ingredientKnownEffectsPath, buffer);
 }
 
 void Manager::OnDeleteSave(const std::string& a_savePath)
@@ -378,11 +378,11 @@ RE::BSEventNotifyControl Manager::ProcessEvent(const RE::MenuOpenCloseEvent* a_e
 		} else {
 			currentPlayerID = get_game_playerID();
 			SKSE::GetTaskInterface()->AddTask([this]() {
-				ShuffleIngredientEffects(shuffleOn == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
+				ShuffleIngredientEffects(GetShuffleOn() == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
 			});
 			newGameStarted = false;
 		}
-	} else if (a_event->menuName == RE::CraftingMenu::MENU_NAME && shuffleOn == SHUFFLE_ON::kAlchemyMenu) {
+	} else if (a_event->menuName == RE::CraftingMenu::MENU_NAME && GetShuffleOn() == SHUFFLE_ON::kAlchemyMenu) {
 		if (a_event->opening) {
 			isAlchemyMenu = false;
 			if (const auto craftingMenu = RE::UI::GetSingleton()->GetMenu<RE::CraftingMenu>(); craftingMenu && craftingMenu->subMenu) {

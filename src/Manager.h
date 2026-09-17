@@ -49,6 +49,7 @@ private:
 
 	[[nodiscard]] SHUFFLE_METHOD GetShuffleMethod() const { return static_cast<SHUFFLE_METHOD>(shuffleMethod.GetValue()); }
 	[[nodiscard]] SHUFFLE_ON     GetShuffleOn() const { return static_cast<SHUFFLE_ON>(shuffleOn.GetValue()); }
+	[[nodiscard]] bool           IsSessionScoped() const { return GetShuffleOn() == SHUFFLE_ON::kGameLoad && fixedSeed == 0; }
 
 	std::uint64_t GetCurrentPlayerID();
 	void          GetPlayerIDFromSave();
@@ -95,4 +96,8 @@ private:
 
 	StringMap<IngredientKnownEffectsMap> ingredientKnownEffectsSaveMap;
 	IngredientKnownEffectsMap            currentIngredientKnownEffectsMap;
+
+	std::uint64_t            shuffleGeneration{ 0 }; 
+	StringMap<std::uint64_t> sessionSaves;   
+	bool                     currentSaveMatchesShuffle{ false };
 };

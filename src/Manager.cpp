@@ -161,6 +161,10 @@ void Manager::UnlearnIngredientEffects(RE::IngredientItem* a_ingredient) const
 		return;
 	}
 
+	if (IsSessionScoped() && currentSaveMatchesShuffle) {
+		return;
+	}
+
 	std::optional<std::uint16_t> knowEffectFlags{};
 	if (const auto it = currentIngredientKnownEffectsMap.find(edid::get_editorID(a_ingredient)); it != currentIngredientKnownEffectsMap.end()) {
 		knowEffectFlags = it->second;
@@ -233,6 +237,7 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 
 			// shuffle until unique
 			std::vector<std::future<void>> futures;
+			futures.reserve(ingredient_chunks.size());
 			for (auto& chunk : ingredient_chunks) {
 				futures.emplace_back(std::async(std::launch::async, [&] {
 					REX::TRandom<std::uint64_t> threadRNG(a_seed);
@@ -267,6 +272,8 @@ void Manager::ShuffleIngredientEffects(ShuffledIngredientEffectGroups& a_effectG
 	const auto seed = GetRNGSeed();
 	if (!shuffled || a_reshuffle) {
 		shuffle_effect_groups(seed, ingredientEffectGroup);
+		shuffleGeneration++;
+		currentSaveMatchesShuffle = false;
 	}
 	if (!shuffled || a_reshuffle || GetShuffleOn() == SHUFFLE_ON::kPlaythrough) {
 		ApplyEffectGroups(ingredientEffectGroup);
@@ -327,7 +334,11 @@ void Manager::OnLoad(const std::string& a_savePath)
 		currentIngredientKnownEffectsMap.clear();
 	}
 
-	REX::INFO("Loaded : {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
+	const auto sessionIt = sessionSaves.find(currentSave);
+	currentSaveMatchesShuffle = sessionIt != sessionSaves.end() && sessionIt->second == shuffleGeneration;
+
+	REX::INFO("Loaded : {} | {} ingredients known{}", a_savePath, currentIngredientKnownEffectsMap.size(),
+		IsSessionScoped() ? (currentSaveMatchesShuffle ? " | saved this session, keeping known effects" : " | saved under a different shuffle, unlearning") : "");
 
 	if (ShouldShuffleOnLoadSaveOrNewGame(true)) {
 		ShuffleIngredientEffects(GetShuffleOn() == SHUFFLE_ON::kPlaythrough ? playthroughEffectGroupMap[currentPlayerID] : shuffledEffectGroups);
@@ -351,6 +362,7 @@ void Manager::OnSave(const std::string& a_savePath)
 	REX::INFO("Save: {} | {} ingredients known", a_savePath, currentIngredientKnownEffectsMap.size());
 
 	ingredientKnownEffectsSaveMap[currentSave] = currentIngredientKnownEffectsMap;
+	sessionSaves[currentSave] = shuffleGeneration;
 
 	std::string           buffer;
 	[[maybe_unused]] auto ec = glz::write_file_json(ingredientKnownEffectsSaveMap, ingredientKnownEffectsPath, buffer);
@@ -359,6 +371,7 @@ void Manager::OnSave(const std::string& a_savePath)
 void Manager::OnDeleteSave(const std::string& a_savePath)
 {
 	ingredientKnownEffectsSaveMap.erase(a_savePath);
+	sessionSaves.erase(a_savePath);
 }
 
 void Manager::OnNewGame()

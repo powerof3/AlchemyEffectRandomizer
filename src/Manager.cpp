@@ -218,7 +218,7 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 
 			constexpr auto is_distribution_unique = [](const IngredientEffectGroups& a_effectGroups) {
 				for (const auto& effectGroup : a_effectGroups) {
-					std::unordered_set<RE::EffectSetting*> set{};
+					Set<RE::EffectSetting*> set{};
 					for (const auto& effect : effectGroup) {
 						if (!set.emplace(effect->baseEffect).second) {
 							return false;
@@ -232,8 +232,9 @@ void Manager::shuffle_effect_groups(const std::uint64_t a_seed, IngredientEffect
 			shuffle_effects(a_effectGroups, local_rng);
 
 			// divide into chunks
-			auto num_chunks = static_cast<std::size_t>(a_effectGroups.size() / std::thread::hardware_concurrency());
-			auto ingredient_chunks = a_effectGroups | std::views::chunk(num_chunks) | std::ranges::to<std::vector<IngredientEffectGroups>>();
+			const auto threads = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+			const auto num_chunks = std::max<std::size_t>(1, a_effectGroups.size() / threads);
+			auto       ingredient_chunks = a_effectGroups | std::views::chunk(num_chunks) | std::ranges::to<std::vector<IngredientEffectGroups>>();
 
 			// shuffle until unique
 			std::vector<std::future<void>> futures;
